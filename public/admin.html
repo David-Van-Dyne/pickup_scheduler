@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin - Tire Pickup Scheduler</title>
+    <link rel="stylesheet" href="/styles_new.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <header class="container">
+      <h1>🔧 Tire Pickup Admin</h1>
+      <p>Manage tire collection appointments</p>
+    </header>
+
+    <main class="container card">
+      <section id="loginSection">
+        <h2>🔐 Admin Access</h2>
+        <form id="loginForm" class="grid">
+          <label class="span-2">
+            Admin Password
+            <input type="password" name="password" placeholder="Enter admin password" required />
+          </label>
+          <div class="actions">
+            <button type="submit" id="loginBtn">
+              <span id="loginBtnText">� Access Admin Panel</span>
+            </button>
+            <span id="loginStatus"></span>
+          </div>
+        </form>
+      </section>
+
+      <section id="adminSection" hidden>
+        <div class="toolbar">
+          <label>
+            📅 Filter by date
+            <input type="date" id="filterDate" />
+          </label>
+          <button id="refresh">🔄 Refresh</button>
+          <button id="exportCsv">📊 Export CSV</button>
+          <button id="logout">🚪 Logout</button>
+        </div>
+
+        <div id="apptList" class="list"></div>
+      </section>
+    </main>
+
+    <script src="/admin.js"></script>
+  </body>
+  </html>
+

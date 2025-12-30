@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Used Tire Pickup - Schedule Your Pickup Today</title>
+  <link rel="stylesheet" href="/styles_new.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+  <header class="container">
+    <h1 id="brand">Used Tire Pickup</h1>
+    <p id="hotline">Professional tire collection service</p>
+  </header>
+
+  <main class="container card">
+<h2>🚛 Professional Tire Pickup Service</h2>
+
+    <form id="apptForm">
+      <div class="form-section">
+        <h3>👤 Driver Information</h3>
+        <div class="grid">
+          <label>
+            Full Name *
+            <input type="text" name="name" placeholder="Enter your full name" required />
+          </label>
+          <label>
+            Email Address
+            <input type="email" name="email" placeholder="your.email@example.com" />
+          </label>
+          <label>
+            Phone Number
+            <input type="tel" name="phone" placeholder="(555) 123-4567" />
+          </label>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <h3>🏠 Pickup Location</h3>
+        <div class="grid">
+          <label class="span-2">
+            Street Address *
+            <input type="text" name="address" placeholder="123 Main Street, Apartment 4B" required />
+          </label>
+          <label>
+            City
+            <input type="text" name="city" placeholder="City name" />
+          </label>
+          <label>
+            State
+            <input type="text" name="state" placeholder="State" />
+          </label>
+          <label>
+            ZIP Code *
+            <input type="text" name="zip" pattern="\d{5}" placeholder="12345" required />
+          </label>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <h3>� Tire Details</h3>
+        <div class="grid">
+          <label>
+            Preferred Date *
+            <input type="date" name="date" id="date" required />
+          </label>
+          <label>
+            Time Window *
+            <select name="timeWindow" id="timeWindow" required>
+              <option value="">Select a time window</option>
+            </select>
+          </label>
+          <label>
+            Number of Tires
+            <input type="number" name="tiresCount" min="1" max="20" value="4" placeholder="4" />
+          </label>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <h3>� Special Instructions</h3>
+        <label>
+          Special Instructions
+          <textarea name="notes" rows="4"
+            placeholder="Any special instructions for our pickup team? (e.g., tires are in the garage, call when arriving, etc.)"></textarea>
+        </label>
+      </div>
+
+      <div class="actions">
+        <button type="submit" id="submitBtn">
+          <span id="btnText">� Schedule Tire Pickup</span>
+        </button>
+        <span id="status" role="status"></span>
+      </div>
+    </form>
+  </main>
+
+  <footer class="container">
+    <p>Need help? <a href="tel:" id="phoneLink">Call our hotline</a> | <a href="/admin">Admin Access</a></p>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+
+</html>
