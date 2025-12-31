@@ -4,13 +4,7 @@ function el(tag, attrs = {}, ...children) {
   Object.entries(attrs).forEach(([k, v]) => {
     if (k === 'class') n.className = v; else if (k.startsWith('on') && typeof v === 'function') n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
   });
-  for (const c of children) {
-    if (typeof c === 'string' || typeof c === 'number') {
-      n.appendChild(document.createTextNode(String(c)));
-    } else if (c instanceof Node) {
-      n.appendChild(c);
-    }
-  }
+  for (const c of children) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
   return n;
 }
 
@@ -51,9 +45,14 @@ async function login(password) {
   return data.token;
 }
 
-async function fetchAppointments() {
+async function fetchAppointments(startDate, endDate) {
   const token = getToken();
-  const res = await fetch('/api/appointments', { headers: { 'Authorization': `Bearer ${token}` } });
+  const url = new URL('/api/appointments', window.location.origin);
+  if (startDate && endDate) {
+    url.searchParams.set('startDate', startDate);
+    url.searchParams.set('endDate', endDate);
+  }
+  const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Failed to load');
   return data.appointments || [];
@@ -74,7 +73,6 @@ async function patchAppointment(id, patch) {
 let currentDate = new Date();
 let appointments = [];
 let selectedDate = null;
-let selectedAppointment = null;
 
 function formatDate(date) {
   return date.toISOString().split('T')[0];
@@ -136,12 +134,10 @@ function renderCalendar() {
     const dayAppointments = appointments.filter(apt => apt.date === formatDate(current));
     const isToday = current.toDateString() === today.toDateString();
     const isCurrentMonth = current.getMonth() === currentDate.getMonth();
-    const currentDateCopy = new Date(current); // Create a copy to avoid closure issues
 
     const dayElement = el('div', {
       class: `calendar-day ${isCurrentMonth ? '' : 'other-month'} ${isToday ? 'today' : ''}`,
-      'data-date': formatDate(current),
-      onClick: () => selectDate(currentDateCopy)
+      onClick: () => selectDate(current)
     },
       el('div', { class: 'calendar-day-number' }, current.getDate()),
       el('div', { class: 'calendar-appointments' })
@@ -149,68 +145,18 @@ function renderCalendar() {
 
     if (dayAppointments.length > 0) {
       const appointmentsContainer = dayElement.querySelector('.calendar-appointments');
-      const hasMore = dayAppointments.length > 3;
 
-      if (hasMore) {
-        // Create limited view container (first 3 appointments)
-        const limitedContainer = el('div', { class: 'calendar-appointments-limited' });
-        dayAppointments.slice(0, 3).forEach(apt => {
-          const aptElement = el('div', {
-            class: `appointment-item ${apt.status}`,
-            title: `${apt.name} - ${apt.timeWindow}`
-          }, `${apt.timeWindow}: ${apt.name}`);
-          aptElement.addEventListener('click', () => selectAppointment(apt));
-          limitedContainer.appendChild(aptElement);
-        });
+      dayAppointments.slice(0, 3).forEach(apt => {
+        const aptElement = el('div', {
+          class: `appointment-item ${apt.status}`,
+          title: `${apt.name} - ${apt.timeWindow}`
+        }, `${apt.timeWindow}: ${apt.name}`);
+        appointmentsContainer.appendChild(aptElement);
+      });
 
-        // Add more button
-        const moreElement = el('div', {
-          class: 'appointment-more'
-        }, `+${dayAppointments.length - 3} more`);
-        moreElement.addEventListener('click', (e) => {
-          e.stopPropagation();
-          toggleDayExpansion(currentDateCopy, dayAppointments);
-        });
-        limitedContainer.appendChild(moreElement);
-
-        // Create expanded view container (all appointments)
-        const expandedContainer = el('div', {
-          class: 'calendar-appointments-expanded',
-          style: 'display: none;'
-        });
-
-        // Add show less button at the top
-        const lessElement = el('div', {
-          class: 'appointment-more expanded'
-        }, 'Show less');
-        lessElement.addEventListener('click', (e) => {
-          e.stopPropagation();
-          toggleDayExpansion(currentDateCopy, dayAppointments);
-        });
-        expandedContainer.appendChild(lessElement);
-
-        // Add all appointments
-        dayAppointments.forEach(apt => {
-          const aptElement = el('div', {
-            class: `appointment-item ${apt.status}`,
-            title: `${apt.name} - ${apt.timeWindow}`
-          }, `${apt.timeWindow}: ${apt.name}`);
-          aptElement.addEventListener('click', () => selectAppointment(apt));
-          expandedContainer.appendChild(aptElement);
-        });
-
-        appointmentsContainer.appendChild(limitedContainer);
-        appointmentsContainer.appendChild(expandedContainer);
-      } else {
-        // Show all appointments directly (no more/less functionality needed)
-        dayAppointments.forEach(apt => {
-          const aptElement = el('div', {
-            class: `appointment-item ${apt.status}`,
-            title: `${apt.name} - ${apt.timeWindow}`
-          }, `${apt.timeWindow}: ${apt.name}`);
-          aptElement.addEventListener('click', () => selectAppointment(apt));
-          appointmentsContainer.appendChild(aptElement);
-        });
+      if (dayAppointments.length > 3) {
+        const countElement = el('div', { class: 'appointment-count' }, `+${dayAppointments.length - 3}`);
+        dayElement.appendChild(countElement);
       }
     }
 
@@ -222,42 +168,8 @@ function renderCalendar() {
   calendar.appendChild(grid);
 }
 
-function toggleDayExpansion(date, dayAppointments) {
-  const dateStr = formatDate(date);
-  const dayElement = document.querySelector(`[data-date="${dateStr}"]`);
-
-  if (!dayElement) return;
-
-  const limitedContainer = dayElement.querySelector('.calendar-appointments-limited');
-  const expandedContainer = dayElement.querySelector('.calendar-appointments-expanded');
-
-  if (!limitedContainer || !expandedContainer) return;
-
-  if (limitedContainer.style.display === 'none' || limitedContainer.style.display === '') {
-    // Currently showing expanded, switch to limited
-    limitedContainer.style.display = 'block';
-    expandedContainer.style.display = 'none';
-  } else {
-    // Currently showing limited, switch to expanded
-    limitedContainer.style.display = 'none';
-    expandedContainer.style.display = 'block';
-  }
-}
-
 function selectDate(date) {
   selectedDate = new Date(date);
-  selectedAppointment = null; // Clear appointment selection when selecting a date
-  const dayAppointments = appointments.filter(apt => apt.date === formatDate(selectedDate));
-
-  $('#selectedDate').textContent = formatDisplayDate(selectedDate);
-  $('#appointmentDetails').hidden = false;
-
-  renderDayAppointments(dayAppointments);
-}
-
-function selectAppointment(appointment) {
-  selectedDate = new Date(appointment.date);
-  selectedAppointment = appointment;
   const dayAppointments = appointments.filter(apt => apt.date === formatDate(selectedDate));
 
   $('#selectedDate').textContent = formatDisplayDate(selectedDate);
@@ -276,11 +188,7 @@ function renderDayAppointments(dayAppointments) {
   }
 
   dayAppointments.forEach(apt => {
-    const isSelected = selectedAppointment && selectedAppointment.id === apt.id;
-    const card = el('div', { 
-      class: `day-appointment-card ${isSelected ? 'selected' : ''}`,
-      onClick: () => selectAppointment(apt)
-    },
+    const card = el('div', { class: 'day-appointment-card' },
       el('div', { class: 'appointment-header' },
         el('div', {},
           el('strong', {}, apt.name),
@@ -339,15 +247,13 @@ function renderDayAppointments(dayAppointments) {
 
 async function loadAppointments() {
   try {
-    const allAppointments = await fetchAppointments();
-    // Filter appointments for the current month view
     const startDate = formatDate(getMonthStart(currentDate));
     const endDate = formatDate(getMonthEnd(currentDate));
-    appointments = allAppointments.filter(apt => apt.date >= startDate && apt.date <= endDate);
+    appointments = await fetchAppointments(startDate, endDate);
     renderCalendar();
 
     if (selectedDate) {
-      const dayAppointments = allAppointments.filter(apt => apt.date === formatDate(selectedDate));
+      const dayAppointments = appointments.filter(apt => apt.date === formatDate(selectedDate));
       renderDayAppointments(dayAppointments);
     }
   } catch (error) {
@@ -370,21 +276,9 @@ function exportCsv(list) {
 (function init() {
   const token = getToken();
   if (token) {
-    // Try to load appointments, but handle invalid tokens
-    loadAppointments().catch(error => {
-      if (error.message.includes('Unauthorized')) {
-        // Token is invalid, clear it and show login form
-        clearToken();
-        $('#loginSection').hidden = false;
-        $('#adminSection').hidden = true;
-      } else {
-        alert(`❌ ${error.message}`);
-      }
-    });
-  } else {
-    // No token, show login form
-    $('#loginSection').hidden = false;
-    $('#adminSection').hidden = true;
+    $('#loginSection').hidden = true;
+    $('#adminSection').hidden = false;
+    loadAppointments();
   }
 
   $('#loginForm').addEventListener('submit', async (e) => {
@@ -426,4 +320,3 @@ function exportCsv(list) {
     location.reload();
   });
 })();
-

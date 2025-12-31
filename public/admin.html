@@ -23,7 +23,7 @@
           </label>
           <div class="actions">
             <button type="submit" id="loginBtn">
-              <span id="loginBtnText">� Access Admin Panel</span>
+              <span id="loginBtnText">🔐 Access Admin Panel</span>
             </button>
             <span id="loginStatus"></span>
           </div>
@@ -31,17 +31,25 @@
       </section>
 
       <section id="adminSection" hidden>
-        <div class="toolbar">
-          <label>
-            📅 Filter by date
-            <input type="date" id="filterDate" />
-          </label>
-          <button id="refresh">🔄 Refresh</button>
-          <button id="exportCsv">📊 Export CSV</button>
-          <button id="logout">🚪 Logout</button>
+        <div class="calendar-controls">
+          <div class="calendar-nav">
+            <button id="prevMonth">⬅️ Previous</button>
+            <h2 id="currentMonth">Month Year</h2>
+            <button id="nextMonth">Next ➡️</button>
+          </div>
+          <div class="calendar-actions">
+            <button id="refresh">🔄 Refresh</button>
+            <button id="exportCsv">📊 Export CSV</button>
+            <button id="logout">🚪 Logout</button>
+          </div>
         </div>
 
-        <div id="apptList" class="list"></div>
+        <div id="calendar"></div>
+
+        <div id="appointmentDetails" class="appointment-details" hidden>
+          <h3>📅 Appointments for <span id="selectedDate"></span></h3>
+          <div id="dayAppointments" class="day-appointments"></div>
+        </div>
       </section>
     </main>
 

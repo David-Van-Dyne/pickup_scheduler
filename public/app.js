@@ -81,32 +81,48 @@ async function submitAppointment(evt) {
     showStatus('⏳ Loading pickup scheduler...', 'loading');
 
     const cfg = await getConfig();
-    document.getElementById('brand').textContent = cfg.businessName || 'Used Tire Pickup';
-    document.getElementById('hotline').textContent = `Questions? Call ${cfg.businessPhone}`;
 
-    // Update phone link
+    // Only update elements that exist
+    const brandEl = document.getElementById('brand');
+    if (brandEl) {
+      brandEl.textContent = cfg.businessName || 'Used Tire Pickup';
+    }
+
+    const hotlineEl = document.getElementById('hotline');
+    if (hotlineEl && cfg.businessPhone) {
+      hotlineEl.textContent = `Questions? Call ${cfg.businessPhone}`;
+    }
+
+    // Update phone link if it exists
     const phoneLink = document.getElementById('phoneLink');
-    if (cfg.businessPhone) {
+    if (phoneLink && cfg.businessPhone) {
       phoneLink.href = `tel:${cfg.businessPhone}`;
       phoneLink.textContent = cfg.businessPhone;
     }
 
     const tw = document.getElementById('timeWindow');
-    // Clear existing options except the placeholder
-    tw.innerHTML = '<option value="">Select a time window</option>';
+    if (tw) {
+      // Clear existing options except the placeholder
+      tw.innerHTML = '<option value="">Select a time window</option>';
 
-    (cfg.timeWindows || []).forEach(w => {
-      const opt = document.createElement('option');
-      opt.value = w;
-      opt.textContent = w;
-      tw.appendChild(opt);
-    });
+      (cfg.timeWindows || []).forEach(w => {
+        const opt = document.createElement('option');
+        opt.value = w;
+        opt.textContent = w;
+        tw.appendChild(opt);
+      });
+    }
 
     const date = document.getElementById('date');
-    setMinDate(date);
-    disableBlackouts(date, cfg.blackoutDates || []);
+    if (date) {
+      setMinDate(date);
+      disableBlackouts(date, cfg.blackoutDates || []);
+    }
 
-    document.getElementById('apptForm').addEventListener('submit', submitAppointment);
+    const form = document.getElementById('apptForm');
+    if (form) {
+      form.addEventListener('submit', submitAppointment);
+    }
 
     showStatus('✅ Ready to schedule your pickup!', 'success');
     setTimeout(() => showStatus('', ''), 3000);
