@@ -350,7 +350,7 @@ function renderDayAppointments(dayAppointments) {
     const isSelected = selectedAppointment && selectedAppointment.id === apt.id;
     const card = el('div', { 
       class: `day-appointment-card ${isSelected ? 'selected' : ''}`,
-      onClick: () => selectAppointment(apt)
+      onclick: () => selectAppointment(apt)
     },
       el('div', { class: 'appointment-header' },
         el('div', {},
@@ -371,7 +371,7 @@ function renderDayAppointments(dayAppointments) {
       el('div', { class: 'appointment-actions' },
         el('select', {
           id: `status-${apt.id}`,
-          onChange: async (e) => {
+          onchange: async (e) => {
             try {
               await patchAppointment(apt.id, { status: e.target.value });
               await loadAppointments();
@@ -385,7 +385,9 @@ function renderDayAppointments(dayAppointments) {
           el('option', { value: 'cancelled', selected: apt.status === 'cancelled' }, '🔴 Cancelled')
         ),
         el('button', {
-          onClick: async () => {
+          onclick: async (e) => {
+            e.stopPropagation();
+
             try {
               const notes = prompt('Add any notes for this account (optional):');
               await createAccount(apt.id, notes || '');
@@ -398,7 +400,7 @@ function renderDayAppointments(dayAppointments) {
           style: 'padding: 0.5rem 1rem; background: #228B22; color: white; border: none; border-radius: 6px; cursor: pointer; margin-right: 0.5rem;'
         }, '👤 Create Account'),
         el('button', {
-          onClick: async () => {
+          onclick: async () => {
             if (confirm(`Delete appointment for ${apt.name}?`)) {
               try {
                 const token = getToken();
