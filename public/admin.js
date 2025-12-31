@@ -144,6 +144,7 @@ async function deleteNotification(accountId, notificationId) {
 // Calendar state
 let currentDate = new Date();
 let appointments = [];
+let accounts = [];
 let selectedDate = null;
 let selectedAppointment = null;
 
@@ -323,7 +324,7 @@ function selectDate(date) {
   $('#selectedDate').textContent = formatDisplayDate(selectedDate);
   $('#appointmentDetails').hidden = false;
 
-  renderDayAppointments(dayAppointments);
+  renderDayAppointments(dayAppointments, accounts);
 }
 
 function selectAppointment(appointment) {
@@ -334,10 +335,10 @@ function selectAppointment(appointment) {
   $('#selectedDate').textContent = formatDisplayDate(selectedDate);
   $('#appointmentDetails').hidden = false;
 
-  renderDayAppointments(dayAppointments);
+  renderDayAppointments(dayAppointments, accounts);
 }
 
-function renderDayAppointments(dayAppointments) {
+function renderDayAppointments(dayAppointments, accounts = []) {
   const container = $('#dayAppointments');
   container.innerHTML = '';
 
@@ -347,6 +348,7 @@ function renderDayAppointments(dayAppointments) {
   }
 
   dayAppointments.forEach(apt => {
+    const accountExists = accounts.some(account => account.email === apt.email);
     const isSelected = selectedAppointment && selectedAppointment.id === apt.id;
     const card = el('div', { 
       class: `day-appointment-card ${isSelected ? 'selected' : ''}`,
@@ -384,7 +386,7 @@ function renderDayAppointments(dayAppointments) {
           el('option', { value: 'completed', selected: apt.status === 'completed' }, '🟢 Completed'),
           el('option', { value: 'cancelled', selected: apt.status === 'cancelled' }, '🔴 Cancelled')
         ),
-        el('button', {
+        !accountExists && el('button', {
           onclick: async (e) => {
             e.stopPropagation();
 
@@ -440,6 +442,7 @@ function renderAccounts(accounts) {
       el('div', { class: 'account-header' },
         el('div', {},
           el('div', { class: 'account-name' }, account.name),
+          el('div', { class: 'account-address' }, [account.address, account.city, account.state, account.zip].filter(Boolean).join(', ')),
           el('div', { class: 'account-email' }, account.email)
         ),
         el('div', { class: 'account-stats' },
@@ -567,6 +570,7 @@ function showAccountsList() {
 async function loadAppointments() {
   try {
     const allAppointments = await fetchAppointments();
+    accounts = await fetchAccounts();
     // Filter appointments for the current month view
     const startDate = formatDate(getMonthStart(currentDate));
     const endDate = formatDate(getMonthEnd(currentDate));
@@ -575,7 +579,7 @@ async function loadAppointments() {
 
     if (selectedDate) {
       const dayAppointments = allAppointments.filter(apt => apt.date === formatDate(selectedDate));
-      renderDayAppointments(dayAppointments);
+      renderDayAppointments(dayAppointments, accounts);
     }
   } catch (error) {
     alert(`❌ Failed to load appointments: ${error.message}`);
