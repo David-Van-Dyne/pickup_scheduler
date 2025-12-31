@@ -1270,6 +1270,9 @@ header p {
 }
 
 .notification-item {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
   padding: 1rem;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-medium);
@@ -1280,6 +1283,8 @@ header p {
 .notification-date {
   font-weight: 600;
   color: var(--accent-primary);
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .notification-message {
@@ -1299,11 +1304,14 @@ header p {
   border-radius: var(--radius-small);
 }
 
-.add-notification input[type="text"] {
+.add-notification textarea {
   flex: 1;
   padding: 0.5rem;
   border: 1px solid var(--input-border);
   border-radius: var(--radius-small);
+  resize: vertical;
+  min-height: 60px;
+  font-family: inherit;
 }
 
 .account-actions {
@@ -1373,7 +1381,7 @@ header p {
     gap: 0.75rem;
   }
 
-  .add-notification input[type="text"] {
+  .add-notification textarea {
     width: 100%;
   }
 
@@ -1383,5 +1391,12 @@ header p {
 
   .account-actions button {
     width: 100%;
+  }
+
+  .notification-message {
+    display: block;
+    visibility: visible;
+    opacity: 1;
+    min-height: 60px;
   }
 }

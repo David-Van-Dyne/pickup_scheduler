@@ -173,19 +173,26 @@ function renderCalendar() {
   const calendar = $('#calendar');
   const monthStart = getMonthStart(currentDate);
   const monthEnd = getMonthEnd(currentDate);
+
   const startDate = new Date(monthStart);
-  startDate.setDate(startDate.getDate() - monthStart.getDay()); // Start from Sunday
+  startDate.setDate(startDate.getDate() - monthStart.getDay()); // Sunday
 
   const endDate = new Date(monthEnd);
-  endDate.setDate(endDate.getDate() + (6 - monthEnd.getDay())); // End on Saturday
+  endDate.setDate(endDate.getDate() + (6 - monthEnd.getDay())); // Saturday
 
-  // Update month header
+  // Header text
   $('#currentMonth').textContent = currentDate.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long'
   });
 
-  // Create calendar header
+  // Build a date -> appointments map once
+  const apptsByDate = new Map();
+  for (const apt of appointments) {
+    if (!apptsByDate.has(apt.date)) apptsByDate.set(apt.date, []);
+    apptsByDate.get(apt.date).push(apt);
+  }
+
   const header = el('div', { class: 'calendar-header' },
     el('div', {}, 'Sun'),
     el('div', {}, 'Mon'),
@@ -196,7 +203,6 @@ function renderCalendar() {
     el('div', {}, 'Sat')
   );
 
-  // Create calendar grid
   const grid = el('div', { class: 'calendar-grid' });
   grid.appendChild(header);
 
@@ -205,82 +211,74 @@ function renderCalendar() {
   today.setHours(0, 0, 0, 0);
 
   while (current <= endDate) {
-    const dayAppointments = appointments.filter(apt => apt.date === formatDate(current));
+    const dateKey = formatDate(current);
+    const dayAppointments = apptsByDate.get(dateKey) || [];
+
     const isToday = current.toDateString() === today.toDateString();
     const isCurrentMonth = current.getMonth() === currentDate.getMonth();
-    const currentDateCopy = new Date(current); // Create a copy to avoid closure issues
+    const currentDateCopy = new Date(current);
 
     const dayElement = el('div', {
       class: `calendar-day ${isCurrentMonth ? '' : 'other-month'} ${isToday ? 'today' : ''}`,
-      'data-date': formatDate(current),
-      onClick: () => selectDate(currentDateCopy)
+      'data-date': dateKey,
+      onclick: () => selectDate(currentDateCopy)
     },
       el('div', { class: 'calendar-day-number' }, current.getDate()),
       el('div', { class: 'calendar-appointments' })
     );
 
-    if (dayAppointments.length > 0) {
+    if (dayAppointments.length) {
       const appointmentsContainer = dayElement.querySelector('.calendar-appointments');
-      const hasMore = dayAppointments.length > 3;
 
-      if (hasMore) {
-        // Create limited view container (first 3 appointments)
+      if (dayAppointments.length > 3) {
         const limitedContainer = el('div', { class: 'calendar-appointments-limited' });
+
         dayAppointments.slice(0, 3).forEach(apt => {
           const aptElement = el('div', {
             class: `appointment-item ${apt.status}`,
             title: `${apt.name} - ${apt.timeWindow}`
           }, `${apt.timeWindow}: ${apt.name}`);
-          aptElement.addEventListener('click', () => selectAppointment(apt));
+          aptElement.addEventListener('click', (e) => { e.stopPropagation(); selectAppointment(apt); });
           limitedContainer.appendChild(aptElement);
         });
 
-        // Add more button
-        const moreElement = el('div', {
-          class: 'appointment-more'
-        }, `+${dayAppointments.length - 3} more`);
+        const moreElement = el('div', { class: 'appointment-more' }, `+${dayAppointments.length - 3} more`);
         moreElement.addEventListener('click', (e) => {
           e.stopPropagation();
           toggleDayExpansion(currentDateCopy, dayAppointments);
         });
         limitedContainer.appendChild(moreElement);
 
-        // Create expanded view container (all appointments)
         const expandedContainer = el('div', {
           class: 'calendar-appointments-expanded',
           style: 'display: none;'
         });
 
-        // Add show less button at the top
-        const lessElement = el('div', {
-          class: 'appointment-more expanded'
-        }, 'Show less');
+        const lessElement = el('div', { class: 'appointment-more expanded' }, 'Show less');
         lessElement.addEventListener('click', (e) => {
           e.stopPropagation();
           toggleDayExpansion(currentDateCopy, dayAppointments);
         });
         expandedContainer.appendChild(lessElement);
 
-        // Add all appointments
         dayAppointments.forEach(apt => {
           const aptElement = el('div', {
             class: `appointment-item ${apt.status}`,
             title: `${apt.name} - ${apt.timeWindow}`
           }, `${apt.timeWindow}: ${apt.name}`);
-          aptElement.addEventListener('click', () => selectAppointment(apt));
+          aptElement.addEventListener('click', (e) => { e.stopPropagation(); selectAppointment(apt); });
           expandedContainer.appendChild(aptElement);
         });
 
         appointmentsContainer.appendChild(limitedContainer);
         appointmentsContainer.appendChild(expandedContainer);
       } else {
-        // Show all appointments directly (no more/less functionality needed)
         dayAppointments.forEach(apt => {
           const aptElement = el('div', {
             class: `appointment-item ${apt.status}`,
             title: `${apt.name} - ${apt.timeWindow}`
           }, `${apt.timeWindow}: ${apt.name}`);
-          aptElement.addEventListener('click', () => selectAppointment(apt));
+          aptElement.addEventListener('click', (e) => { e.stopPropagation(); selectAppointment(apt); });
           appointmentsContainer.appendChild(aptElement);
         });
       }
@@ -290,8 +288,7 @@ function renderCalendar() {
     current.setDate(current.getDate() + 1);
   }
 
-  calendar.innerHTML = '';
-  calendar.appendChild(grid);
+  calendar.replaceChildren(grid); // slightly cleaner than innerHTML=''
 }
 
 function toggleDayExpansion(date, dayAppointments) {
@@ -350,7 +347,7 @@ function renderDayAppointments(dayAppointments, accounts = []) {
   dayAppointments.forEach(apt => {
     const accountExists = accounts.some(account => account.email === apt.email);
     const isSelected = selectedAppointment && selectedAppointment.id === apt.id;
-    const card = el('div', { 
+    const card = el('div', {
       class: `day-appointment-card ${isSelected ? 'selected' : ''}`,
       onclick: () => selectAppointment(apt)
     },
@@ -435,9 +432,9 @@ function renderAccounts(accounts) {
   }
 
   accounts.forEach(account => {
-    const card = el('div', { 
+    const card = el('div', {
       class: 'account-card',
-      onClick: () => showAccountDetails(account)
+      onclick: () => showAccountDetails(account)
     },
       el('div', { class: 'account-header' },
         el('div', {},
@@ -509,13 +506,17 @@ function renderNotifications(account) {
   }
 
   notifications.forEach(notification => {
+    const textarea = document.createElement('textarea');
+    textarea.className = 'notification-message';
+    textarea.value = notification.message || '';
     const item = el('div', { class: 'notification-item' },
-      el('div', { class: 'notification-date' }, 
+      el('div', { class: 'notification-date' },
         `📅 ${new Date(notification.date).toLocaleDateString()}`
       ),
-      el('div', { class: 'notification-message' }, notification.message),
+      textarea,
+
       el('button', {
-        onClick: async () => {
+        onclick: async () => {
           if (confirm('Delete this notification?')) {
             try {
               await deleteNotification(account.id, notification.id);
@@ -531,6 +532,8 @@ function renderNotifications(account) {
 
     container.appendChild(item);
   });
+  console.log(document.querySelectorAll('#notificationsList textarea.notification-message')
+  );
 }
 
 async function loadAccounts() {
@@ -548,7 +551,7 @@ async function loadAccountDetails(accountId) {
     const res = await fetch(`/api/accounts/${accountId}`, { headers: { 'Authorization': `Bearer ${token}` } });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to load account');
-    
+
     renderAccountDetails(data.account);
   } catch (error) {
     alert(`❌ Failed to load account details: ${error.message}`);
@@ -587,7 +590,7 @@ async function loadAppointments() {
 }
 
 function exportCsv(list) {
-  const headers = ['id','createdAt','status','name','email','phone','address','city','state','zip','date','timeWindow','tiresCount','notes'];
+  const headers = ['id', 'createdAt', 'status', 'name', 'email', 'phone', 'address', 'city', 'state', 'zip', 'date', 'timeWindow', 'tiresCount', 'notes'];
   const rows = [headers.join(',')].concat(
     list.map(a => headers.map(h => JSON.stringify(a[h] ?? '')).join(','))
   ).join('\n');
@@ -666,7 +669,7 @@ function exportCsv(list) {
   $('#searchAccounts').addEventListener('input', (e) => {
     const searchTerm = e.target.value.toLowerCase();
     const accountCards = document.querySelectorAll('.account-card');
-    
+
     accountCards.forEach(card => {
       const name = card.querySelector('.account-name').textContent.toLowerCase();
       const email = card.querySelector('.account-email').textContent.toLowerCase();
@@ -680,7 +683,7 @@ function exportCsv(list) {
   $('#addNotification').addEventListener('click', async () => {
     const dateInput = $('#notificationDate');
     const messageInput = $('#notificationMessage');
-    
+
     if (!dateInput.value || !messageInput.value.trim()) {
       alert('Please enter both date and message for the notification.');
       return;
