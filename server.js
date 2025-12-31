@@ -5,12 +5,15 @@ const path = require('path');
 const url = require('url');
 const crypto = require('crypto');
 
+// Load environment variables from .env file
+require('dotenv').config();
+
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_DIR = path.join(__dirname, 'data');
 const APPTS_FILE = path.join(DATA_DIR, 'appointments.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 // In-memory session tokens: token -> { role: 'admin', createdAt }
 const sessions = new Map();
