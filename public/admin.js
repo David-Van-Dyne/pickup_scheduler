@@ -717,5 +717,12 @@ function exportCsv(list) {
     clearToken();
     location.reload();
   });
+
+  $('#calendar-view').addEventListener('click', () => {
+    renderCalendar();
+    $('#calendar').hidden = false;
+    $('#appointmentDetails').hidden = true;
+    $('#accountsSection').hidden = true;
+  });
 })();
 
