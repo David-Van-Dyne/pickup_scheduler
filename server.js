@@ -6,10 +6,21 @@ const url = require('url');
 const crypto = require('crypto');
 
 // Load environment variables from .env file
-try {
-  require('dotenv').config();
-} catch (e) {
-  console.log('dotenv not available, using default environment variables');
+let ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+if (!ADMIN_PASSWORD) {
+  try {
+    const envContent = fs.readFileSync('.env', 'utf8');
+    const envLines = envContent.split('\n');
+    for (const line of envLines) {
+      const [key, value] = line.split('=');
+      if (key && key.trim() === 'ADMIN_PASSWORD') {
+        ADMIN_PASSWORD = value ? value.trim() : '';
+        break;
+      }
+    }
+  } catch (e) {
+    console.log('Could not load .env file');
+  }
 }
 
 const PORT = process.env.PORT || 3000;
@@ -18,7 +29,6 @@ const DATA_DIR = path.join(__dirname, 'data');
 const APPTS_FILE = path.join(DATA_DIR, 'appointments.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 // In-memory session tokens: token -> { role: 'admin', createdAt }
 const sessions = new Map();
