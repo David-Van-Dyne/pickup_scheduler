@@ -1,6 +1,7 @@
 ## Data
 
 appointments.json
+accounts.json
 
 ## Environment variables
 .env

@@ -40,6 +40,7 @@
           <div class="calendar-actions">
             <button id="refresh">🔄 Refresh</button>
             <button id="exportCsv">📊 Export CSV</button>
+            <button id="manageAccounts">👥 Accounts</button>
             <button id="logout">🚪 Logout</button>
           </div>
         </div>
@@ -49,6 +50,34 @@
         <div id="appointmentDetails" class="appointment-details" hidden>
           <h3>📅 Appointments for <span id="selectedDate"></span></h3>
           <div id="dayAppointments" class="day-appointments"></div>
+        </div>
+
+        <div id="accountsSection" class="accounts-section" hidden>
+          <h3>👥 Customer Accounts</h3>
+          <div class="accounts-controls">
+            <button id="refreshAccounts">🔄 Refresh</button>
+            <input type="text" id="searchAccounts" placeholder="Search accounts..." />
+          </div>
+          <div id="accountsList" class="accounts-list"></div>
+        </div>
+
+        <div id="accountDetails" class="account-details" hidden>
+          <h3>👤 Account Details</h3>
+          <div id="accountInfo" class="account-info"></div>
+          <div class="account-notifications">
+            <h4>📢 Notifications</h4>
+            <div id="notificationsList" class="notifications-list"></div>
+            <div class="add-notification">
+              <input type="date" id="notificationDate" />
+              <input type="text" id="notificationMessage" placeholder="Notification message..." />
+              <button id="addNotification">➕ Add Notification</button>
+            </div>
+          </div>
+          <div class="account-actions">
+            <button id="backToAccounts">⬅️ Back to Accounts</button>
+            <button id="editAccount">✏️ Edit</button>
+            <button id="deleteAccount" class="danger">🗑️ Delete</button>
+          </div>
         </div>
       </section>
     </main>

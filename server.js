@@ -6,13 +6,18 @@ const url = require('url');
 const crypto = require('crypto');
 
 // Load environment variables from .env file
-require('dotenv').config();
+try {
+  require('dotenv').config();
+} catch (e) {
+  console.log('dotenv not available, using default environment variables');
+}
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_DIR = path.join(__dirname, 'data');
 const APPTS_FILE = path.join(DATA_DIR, 'appointments.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
+const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 // In-memory session tokens: token -> { role: 'admin', createdAt }
@@ -130,6 +135,18 @@ async function saveAppointments(list) {
   await writeJson(APPTS_FILE, list);
 }
 
+async function getAccounts() {
+  ensureDirSync(DATA_DIR);
+  const list = await readJson(ACCOUNTS_FILE, []);
+  if (!Array.isArray(list)) return [];
+  return list;
+}
+
+async function saveAccounts(list) {
+  ensureDirSync(DATA_DIR);
+  await writeJson(ACCOUNTS_FILE, list);
+}
+
 function normalizeDateOnly(str) {
   // Accept YYYY-MM-DD only
   if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(str || '')) return null;
@@ -243,6 +260,146 @@ async function handleApi(req, res, parsed) {
     return sendJson(res, 200, { appointment: appts[idx] });
   }
 
+  // Account management endpoints
+  if (pathname === '/api/accounts' && method === 'GET') {
+    if (!authAdmin(req)) return sendJson(res, 401, { error: 'Unauthorized' });
+    const accounts = await getAccounts();
+    return sendJson(res, 200, { accounts });
+  }
+
+  if (method === 'POST' && pathname === '/api/accounts') {
+    if (!authAdmin(req)) return sendJson(res, 401, { error: 'Unauthorized' });
+    try {
+      const body = await parseBody(req);
+      if (!body || !body.appointmentId) {
+        return sendJson(res, 400, { error: 'Appointment ID required' });
+      }
+
+      const appts = await getAppointments();
+      const accounts = await getAccounts();
+      const appointment = appts.find(a => a.id === body.appointmentId);
+
+      if (!appointment) {
+        return sendJson(res, 404, { error: 'Appointment not found' });
+      }
+
+      // Check if account already exists
+      const existingAccount = accounts.find(a => a.email === appointment.email);
+      if (existingAccount) {
+        return sendJson(res, 409, { error: 'Account already exists for this email' });
+      }
+
+      // Create new account from appointment
+      const account = {
+        id: generateId('acc_'),
+        createdAt: new Date().toISOString(),
+        name: appointment.name,
+        email: appointment.email,
+        phone: appointment.phone,
+        address: appointment.address,
+        city: appointment.city,
+        state: appointment.state,
+        zip: appointment.zip,
+        totalPickups: 1,
+        lastPickup: appointment.date,
+        notifications: [],
+        notes: body.notes || ''
+      };
+
+      accounts.push(account);
+      await saveAccounts(accounts);
+
+      return sendJson(res, 201, { account });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message || 'Invalid request' });
+    }
+  }
+
+  if (pathname.startsWith('/api/accounts/') && method === 'GET') {
+    if (!authAdmin(req)) return sendJson(res, 401, { error: 'Unauthorized' });
+    const id = pathname.split('/').pop();
+    const accounts = await getAccounts();
+    const account = accounts.find(a => a.id === id);
+    if (!account) return sendJson(res, 404, { error: 'Account not found' });
+    return sendJson(res, 200, { account });
+  }
+
+  if (pathname.startsWith('/api/accounts/') && method === 'PATCH') {
+    if (!authAdmin(req)) return sendJson(res, 401, { error: 'Unauthorized' });
+    const id = pathname.split('/').pop();
+    const body = await parseBody(req).catch(() => ({}));
+    const accounts = await getAccounts();
+    const idx = accounts.findIndex(a => a.id === id);
+    if (idx === -1) return sendJson(res, 404, { error: 'Account not found' });
+
+    const allowed = ['name', 'email', 'phone', 'address', 'city', 'state', 'zip', 'notes'];
+    for (const key of allowed) {
+      if (key in body) accounts[idx][key] = body[key];
+    }
+
+    await saveAccounts(accounts);
+    return sendJson(res, 200, { account: accounts[idx] });
+  }
+
+  if (pathname.startsWith('/api/accounts/') && method === 'DELETE') {
+    if (!authAdmin(req)) return sendJson(res, 401, { error: 'Unauthorized' });
+    const id = pathname.split('/').pop();
+    const accounts = await getAccounts();
+    const idx = accounts.findIndex(a => a.id === id);
+    if (idx === -1) return sendJson(res, 404, { error: 'Account not found' });
+
+    accounts.splice(idx, 1);
+    await saveAccounts(accounts);
+    return sendJson(res, 200, { success: true });
+  }
+
+  // Notification management for accounts
+  if (pathname.startsWith('/api/accounts/') && pathname.endsWith('/notifications') && method === 'POST') {
+    if (!authAdmin(req)) return sendJson(res, 401, { error: 'Unauthorized' });
+    const accountId = pathname.split('/')[3];
+    const body = await parseBody(req).catch(() => ({}));
+
+    if (!body.message || !body.date) {
+      return sendJson(res, 400, { error: 'Message and date required' });
+    }
+
+    const accounts = await getAccounts();
+    const idx = accounts.findIndex(a => a.id === accountId);
+    if (idx === -1) return sendJson(res, 404, { error: 'Account not found' });
+
+    const notification = {
+      id: generateId('notif_'),
+      message: body.message,
+      date: body.date,
+      createdAt: new Date().toISOString(),
+      sent: false
+    };
+
+    if (!accounts[idx].notifications) accounts[idx].notifications = [];
+    accounts[idx].notifications.push(notification);
+
+    await saveAccounts(accounts);
+    return sendJson(res, 201, { notification });
+  }
+
+  if (pathname.startsWith('/api/accounts/') && pathname.includes('/notifications/') && method === 'DELETE') {
+    if (!authAdmin(req)) return sendJson(res, 401, { error: 'Unauthorized' });
+    const parts = pathname.split('/');
+    const accountId = parts[3];
+    const notificationId = parts[5];
+
+    const accounts = await getAccounts();
+    const accountIdx = accounts.findIndex(a => a.id === accountId);
+    if (accountIdx === -1) return sendJson(res, 404, { error: 'Account not found' });
+
+    const notifIdx = accounts[accountIdx].notifications?.findIndex(n => n.id === notificationId);
+    if (notifIdx === undefined || notifIdx === -1) return sendJson(res, 404, { error: 'Notification not found' });
+
+    accounts[accountIdx].notifications.splice(notifIdx, 1);
+    await saveAccounts(accounts);
+    return sendJson(res, 200, { success: true });
+  }
+
   if (method === 'GET' && pathname === '/healthz') {
     return sendJson(res, 200, { ok: true });
   }
@@ -284,7 +441,7 @@ async function requestListener(req, res) {
     res.setHeader('Vary', 'Origin');
   }
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     return res.end();
