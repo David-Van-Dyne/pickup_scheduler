@@ -116,12 +116,12 @@ async function deleteAccount(id) {
   return true;
 }
 
-async function addNotification(accountId, message, date) {
+async function addNotification(accountId, message, date, recurring = false, recurrenceWeeks = 1) {
   const token = getToken();
   const res = await fetch(`/api/accounts/${accountId}/notifications`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-    body: JSON.stringify({ message, date })
+    body: JSON.stringify({ message, date, recurring, recurrenceWeeks })
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Failed to add notification');
@@ -139,6 +139,18 @@ async function deleteNotification(accountId, notificationId) {
     throw new Error(data.error || 'Delete failed');
   }
   return true;
+}
+
+async function updateNotification(accountId, notificationId, updates) {
+  const token = getToken();
+  const res = await fetch(`/api/accounts/${accountId}/notifications/${notificationId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify(updates)
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to update notification');
+  return data.notification;
 }
 
 // Calendar state
@@ -167,6 +179,33 @@ function getMonthStart(date) {
 
 function getMonthEnd(date) {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
+
+async function loadTodaysNotifications() {
+  try {
+    const accounts = await fetchAccounts();
+    const allNotifications = [];
+
+    // Collect all notifications from all accounts
+    accounts.forEach(account => {
+      if (account.notifications && account.notifications.length > 0) {
+        account.notifications.forEach(notification => {
+          allNotifications.push({
+            ...notification,
+            accountId: account.id,
+            accountName: account.name,
+            accountEmail: account.email
+          });
+        });
+      }
+    });
+
+    renderNotificationsList(allNotifications);
+  } catch (error) {
+    console.error('Failed to load today\'s notifications:', error);
+    // Show a more user-friendly message
+    $('#notifications-list').innerHTML = '<div class="note">Unable to load today\'s notifications. Please refresh the page.</div>';
+  }
 }
 
 function renderCalendar() {
@@ -505,35 +544,49 @@ function renderNotifications(account) {
     return;
   }
 
-  notifications.forEach(notification => {
-    const textarea = document.createElement('textarea');
-    textarea.className = 'notification-message';
-    textarea.value = notification.message || '';
-    const item = el('div', { class: 'notification-item' },
-      el('div', { class: 'notification-date' },
-        `📅 ${new Date(notification.date).toLocaleDateString()}`
-      ),
-      textarea,
+  // Sort notifications by date
+  notifications.sort((a, b) => new Date(a.date) - new Date(b.date));
 
-      el('button', {
-        onclick: async () => {
-          if (confirm('Delete this notification?')) {
-            try {
-              await deleteNotification(account.id, notification.id);
-              await loadAccountDetails(account.id);
-            } catch (error) {
-              alert(`❌ ${error.message}`);
+  notifications.forEach(notification => {
+    const date = new Date(notification.date).toLocaleDateString();
+    let displayText = `📅 ${date}: ${notification.message}`;
+    if (notification.recurring) {
+      displayText += ` 🔄 (Repeats every ${notification.recurrenceWeeks} week${notification.recurrenceWeeks !== 1 ? 's' : ''})`;
+    }
+
+    const notificationItem = el('div', {
+      class: 'notification-item',
+      onclick: () => editNotification(notification, account.id)
+    },
+      el('div', { class: 'notification-content' }, displayText),
+      el('div', { class: 'notification-actions' },
+        el('button', {
+          class: 'edit-btn',
+          onclick: (e) => {
+            e.stopPropagation();
+            editNotification(notification, account.id);
+          }
+        }, '✏️'),
+        el('button', {
+          class: 'delete-btn',
+          onclick: async (e) => {
+            e.stopPropagation();
+            if (confirm('Delete this notification?')) {
+              try {
+                await deleteNotification(account.id, notification.id);
+                await loadAccountDetails(account.id);
+                await loadTodaysNotifications();
+              } catch (error) {
+                alert(`❌ ${error.message}`);
+              }
             }
           }
-        },
-        style: 'background: #8B0000; color: white; border: none; border-radius: 4px; padding: 0.25rem 0.5rem; cursor: pointer; margin-left: auto;'
-      }, '🗑️')
+        }, '🗑️')
+      )
     );
 
-    container.appendChild(item);
+    container.appendChild(notificationItem);
   });
-  console.log(document.querySelectorAll('#notificationsList textarea.notification-message')
-  );
 }
 
 async function loadAccounts() {
@@ -553,6 +606,8 @@ async function loadAccountDetails(accountId) {
     if (!res.ok) throw new Error(data.error || 'Failed to load account');
 
     renderAccountDetails(data.account);
+    // Ensure the dataset is set with the correct account ID
+    $('#accountDetails').dataset.accountId = data.account.id;
   } catch (error) {
     alert(`❌ Failed to load account details: ${error.message}`);
   }
@@ -568,6 +623,103 @@ function showAccountDetails(account) {
 function showAccountsList() {
   $('#accountDetails').hidden = true;
   $('#accountsSection').hidden = false;
+}
+
+function editNotification(notification, accountId) {
+  // Create edit form
+  const editForm = el('div', { class: 'notification-edit-form' },
+    el('h4', {}, 'Edit Notification'),
+    el('div', { class: 'form-group' },
+      el('label', {}, 'Date:'),
+      el('input', {
+        type: 'date',
+        id: 'editNotificationDate',
+        value: notification.date.split('T')[0] // Extract date part
+      })
+    ),
+    el('div', { class: 'form-group' },
+      el('label', {}, 'Message:'),
+      el('textarea', {
+        id: 'editNotificationMessage',
+        rows: 3,
+        placeholder: 'Notification message...'
+      }, notification.message)
+    ),
+    el('div', { class: 'form-group' },
+      el('label', {},
+        el('input', {
+          type: 'checkbox',
+          id: 'editNotificationRecurring',
+          checked: notification.recurring || false
+        }),
+        ' Make recurring'
+      )
+    ),
+    el('div', {
+      class: 'form-group recurrence-interval',
+      id: 'editRecurrenceInterval',
+      style: notification.recurring ? 'display: block;' : 'display: none;'
+    },
+      el('label', {}, 'Repeat every '),
+      el('input', {
+        type: 'number',
+        id: 'editNotificationWeeks',
+        min: '1',
+        max: '52',
+        value: notification.recurrenceWeeks || 1
+      }),
+      el('span', {}, ' week(s)')
+    ),
+    el('div', { class: 'form-actions' },
+      el('button', {
+        id: 'saveNotificationEdit',
+        onclick: () => saveNotificationEdit(notification.id, accountId)
+      }, '💾 Save'),
+      el('button', {
+        id: 'cancelNotificationEdit',
+        onclick: () => cancelNotificationEdit()
+      }, '❌ Cancel')
+    )
+  );
+
+  // Show edit form in a modal or replace the notifications list temporarily
+  const container = $('#notificationsList');
+  container.innerHTML = '';
+  container.appendChild(editForm);
+
+  // Add event listener for recurring checkbox
+  $('#editNotificationRecurring').addEventListener('change', (e) => {
+    $('#editRecurrenceInterval').style.display = e.target.checked ? 'block' : 'none';
+  });
+}
+
+async function saveNotificationEdit(notificationId, accountId) {
+  // Get the accountId from the dataset to ensure consistency
+  const currentAccountId = $('#accountDetails').dataset.accountId;
+  
+  const date = $('#editNotificationDate').value;
+  const message = $('#editNotificationMessage').value.trim();
+  const recurring = $('#editNotificationRecurring').checked;
+  const recurrenceWeeks = parseInt($('#editNotificationWeeks').value) || 1;
+
+  if (!date || !message) {
+    alert('Please enter both date and message for the notification.');
+    return;
+  }
+
+  try {
+    await updateNotification(currentAccountId, notificationId, { message, date, recurring, recurrenceWeeks });
+    await loadAccountDetails(currentAccountId);
+    await loadTodaysNotifications();
+  } catch (error) {
+    alert(`❌ ${error.message}`);
+  }
+}
+
+function cancelNotificationEdit() {
+  // This will be called when cancelling edit, but we need to reload the account details
+  const accountId = $('#accountDetails').dataset.accountId;
+  loadAccountDetails(accountId);
 }
 
 async function loadAppointments() {
@@ -633,6 +785,7 @@ function exportCsv(list) {
         $('#loginSection').hidden = true;
         $('#adminSection').hidden = false;
         loadAppointments();
+        loadTodaysNotifications();
       }, 1000);
     } catch (err) {
       setStatus(`❌ ${err.message}`, 'error');
@@ -650,7 +803,10 @@ function exportCsv(list) {
     loadAppointments();
   });
 
-  $('#refresh').addEventListener('click', loadAppointments);
+  $('#refresh').addEventListener('click', () => {
+    loadAppointments();
+    loadTodaysNotifications();
+  });
   $('#exportCsv').addEventListener('click', async () => {
     const allAppointments = await fetchAppointments().catch(() => []);
     exportCsv(allAppointments);
@@ -680,9 +836,17 @@ function exportCsv(list) {
 
   $('#backToAccounts').addEventListener('click', showAccountsList);
 
+  // Handle recurring notification checkbox
+  $('#notificationRecurring').addEventListener('change', (e) => {
+    const recurrenceDiv = $('#recurrenceInterval');
+    recurrenceDiv.style.display = e.target.checked ? 'block' : 'none';
+  });
+
   $('#addNotification').addEventListener('click', async () => {
     const dateInput = $('#notificationDate');
     const messageInput = $('#notificationMessage');
+    const recurringCheckbox = $('#notificationRecurring');
+    const weeksInput = $('#notificationWeeks');
 
     if (!dateInput.value || !messageInput.value.trim()) {
       alert('Please enter both date and message for the notification.');
@@ -691,10 +855,24 @@ function exportCsv(list) {
 
     try {
       const accountId = $('#accountDetails').dataset.accountId;
-      await addNotification(accountId, messageInput.value.trim(), dateInput.value);
+      const notificationData = {
+        message: messageInput.value.trim(),
+        date: dateInput.value
+      };
+
+      if (recurringCheckbox.checked) {
+        notificationData.recurring = true;
+        notificationData.recurrenceWeeks = parseInt(weeksInput.value) || 1;
+      }
+
+      await addNotification(accountId, notificationData.message, notificationData.date, notificationData.recurring, notificationData.recurrenceWeeks);
       await loadAccountDetails(accountId);
+      await loadTodaysNotifications();
       dateInput.value = '';
       messageInput.value = '';
+      recurringCheckbox.checked = false;
+      weeksInput.value = '1';
+      $('#recurrenceInterval').style.display = 'none';
     } catch (error) {
       alert(`❌ ${error.message}`);
     }

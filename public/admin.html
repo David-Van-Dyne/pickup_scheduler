@@ -46,6 +46,8 @@
           </div>
         </div>
 
+        <div id="notifications-list"></div>
+
         <div id="calendar"></div>
 
         <div id="appointmentDetails" class="appointment-details" hidden>
@@ -70,6 +72,18 @@
             <div id="notificationsList" class="notifications-list"></div>
             <div class="add-notification">
               <input type="date" id="notificationDate" />
+              <div class="recurring-options">
+                <label>
+                  <input type="checkbox" id="notificationRecurring" />
+                  Make recurring
+                </label>
+                <div id="recurrenceInterval" class="recurrence-interval" style="display: none;">
+                  <label>Repeat every
+                    <input type="number" id="notificationWeeks" min="1" max="52" value="1" />
+                    week(s)
+                  </label>
+                </div>
+              </div>
               <button id="addNotification">➕ Add Notification</button>
             </div>
             <div>

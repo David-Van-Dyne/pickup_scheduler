@@ -325,7 +325,14 @@ async function handleApi(req, res, parsed) {
     }
   }
 
-  if (pathname.startsWith('/api/accounts/') && method === 'GET') {
+  // Get all accounts
+  if (pathname === '/api/accounts' && method === 'GET') {
+    if (!authAdmin(req)) return sendJson(res, 401, { error: 'Unauthorized' });
+    const accounts = await getAccounts();
+    return sendJson(res, 200, { accounts });
+  }
+
+  if (pathname.startsWith('/api/accounts/') && !pathname.includes('/notifications/') && method === 'GET') {
     if (!authAdmin(req)) return sendJson(res, 401, { error: 'Unauthorized' });
     const id = pathname.split('/').pop();
     const accounts = await getAccounts();
@@ -334,7 +341,7 @@ async function handleApi(req, res, parsed) {
     return sendJson(res, 200, { account });
   }
 
-  if (pathname.startsWith('/api/accounts/') && method === 'PATCH') {
+  if (pathname.startsWith('/api/accounts/') && !pathname.includes('/notifications/') && method === 'PATCH') {
     if (!authAdmin(req)) return sendJson(res, 401, { error: 'Unauthorized' });
     const id = pathname.split('/').pop();
     const body = await parseBody(req).catch(() => ({}));
@@ -351,7 +358,7 @@ async function handleApi(req, res, parsed) {
     return sendJson(res, 200, { account: accounts[idx] });
   }
 
-  if (pathname.startsWith('/api/accounts/') && method === 'DELETE') {
+  if (pathname.startsWith('/api/accounts/') && !pathname.includes('/notifications/') && method === 'DELETE') {
     if (!authAdmin(req)) return sendJson(res, 401, { error: 'Unauthorized' });
     const id = pathname.split('/').pop();
     const accounts = await getAccounts();
@@ -382,11 +389,34 @@ async function handleApi(req, res, parsed) {
       message: body.message,
       date: body.date,
       createdAt: new Date().toISOString(),
-      sent: false
+      sent: false,
+      recurring: body.recurring || false,
+      recurrenceWeeks: body.recurrenceWeeks || 1
     };
 
     if (!accounts[idx].notifications) accounts[idx].notifications = [];
     accounts[idx].notifications.push(notification);
+
+    // If recurring, create future notifications
+    if (notification.recurring && notification.recurrenceWeeks > 0) {
+      const baseDate = new Date(notification.date);
+      // Create up to 12 future occurrences (1 year max)
+      for (let i = 1; i <= 12; i++) {
+        const futureDate = new Date(baseDate);
+        futureDate.setDate(baseDate.getDate() + (i * notification.recurrenceWeeks * 7));
+        const futureNotification = {
+          id: generateId('notif_'),
+          message: notification.message,
+          date: futureDate.toISOString().split('T')[0], // YYYY-MM-DD format
+          createdAt: new Date().toISOString(),
+          sent: false,
+          recurring: true,
+          recurrenceWeeks: notification.recurrenceWeeks,
+          parentId: notification.id // Reference to the original notification
+        };
+        accounts[idx].notifications.push(futureNotification);
+      }
+    }
 
     await saveAccounts(accounts);
     return sendJson(res, 201, { notification });
@@ -408,6 +438,35 @@ async function handleApi(req, res, parsed) {
     accounts[accountIdx].notifications.splice(notifIdx, 1);
     await saveAccounts(accounts);
     return sendJson(res, 200, { success: true });
+  }
+
+  if (pathname.startsWith('/api/accounts/') && pathname.includes('/notifications/') && method === 'PATCH') {
+    if (!authAdmin(req)) return sendJson(res, 401, { error: 'Unauthorized' });
+    const parts = pathname.split('/');
+    const accountId = parts[3];
+    const notificationId = parts[5];
+    const body = await parseBody(req).catch(() => ({}));
+
+    if (!body.message || !body.date) {
+      return sendJson(res, 400, { error: 'Message and date required' });
+    }
+
+    const accounts = await getAccounts();
+    const accountIdx = accounts.findIndex(a => a.id === accountId);
+    if (accountIdx === -1) return sendJson(res, 404, { error: 'Account not found' });
+
+    const notifIdx = accounts[accountIdx].notifications?.findIndex(n => n.id === notificationId);
+    if (notifIdx === undefined || notifIdx === -1) return sendJson(res, 404, { error: 'Notification not found' });
+
+    // Update the notification
+    const notification = accounts[accountIdx].notifications[notifIdx];
+    notification.message = body.message;
+    notification.date = body.date;
+    notification.recurring = body.recurring || false;
+    notification.recurrenceWeeks = body.recurrenceWeeks || 1;
+
+    await saveAccounts(accounts);
+    return sendJson(res, 200, { notification });
   }
 
   if (method === 'GET' && pathname === '/healthz') {
@@ -451,7 +510,7 @@ async function requestListener(req, res) {
     res.setHeader('Vary', 'Origin');
   }
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,PUT,OPTIONS');
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     return res.end();
