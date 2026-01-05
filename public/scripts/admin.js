@@ -1,17 +1,101 @@
+
+import { initCalendar } from "./calendar.js";
+import { initEventCreateButtons } from "./event-create-button.js";
+import { initEventDeleteDialog } from "./event-delete-dialog.js";
+import { initEventDetailsDialog } from "./event-details-dialog.js";
+import { initEventFormDialog } from "./event-form-dialog.js";
+import { initEventStore } from "./event-store.js";
+import { initHamburger } from "./hamburger.js";
+import { initMiniCalendars } from "./mini-calendar.js";
+import { initMobileSidebar } from "./mobile-sidebar.js";
+import { initNav } from "./nav.js";
+import { initNotifications } from "./notifications.js";
+import { initViewSelect } from "./view-select.js";
+import { initResponsive } from "./responsive.js";
+import { initUrl } from "./url.js";
+import { initSync } from "./sync.js";
+
+const eventStore = initEventStore();
+initCalendar(eventStore);
+initEventCreateButtons();
+initEventDeleteDialog();
+initEventDetailsDialog();
+initEventFormDialog();
+initHamburger();
+initMiniCalendars();
+initMobileSidebar();
+initNav();
+initNotifications();
+initViewSelect();
+initUrl();
+initResponsive();
+initSync();
+
+// Immediately hide login section and show admin section when page loads
+document.addEventListener('DOMContentLoaded', () => {
+  const loginSection = document.querySelector('#loginSection');
+  const adminSection = document.querySelector('#adminSection');
+  if (loginSection) loginSection.hidden = true;
+  if (adminSection) adminSection.hidden = false;
+});
+
 function $(sel) { return document.querySelector(sel); }
 function el(tag, attrs = {}, ...children) {
   const n = document.createElement(tag);
-  Object.entries(attrs).forEach(([k, v]) => {
-    if (k === 'class') n.className = v; else if (k.startsWith('on') && typeof v === 'function') n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
-  });
-  for (const c of children) {
-    if (typeof c === 'string' || typeof c === 'number') {
-      n.appendChild(document.createTextNode(String(c)));
-    } else if (c instanceof Node) {
-      n.appendChild(c);
-    }
+
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === 'class') n.className = String(v);
+    else if (k.startsWith('on') && typeof v === 'function') n.addEventListener(k.slice(2), v);
+    else if (k === 'style' && typeof v === 'object') Object.assign(n.style, v);
+    else if (k in n) n[k] = v; // value, checked, hidden, etc.
+    else if (v === true) n.setAttribute(k, '');
+    else n.setAttribute(k, String(v));
   }
+
+  const add = (c) => {
+    if (c == null || c === false) return;
+    if (Array.isArray(c)) return c.forEach(add);
+    if (typeof c === 'string' || typeof c === 'number') n.appendChild(document.createTextNode(String(c)));
+    else if (c instanceof Node) n.appendChild(c);
+  };
+
+  children.forEach(add);
   return n;
+}
+
+
+
+
+let calendarEventsInitialized = false;
+
+function initCalendarEvents() {
+  if (calendarEventsInitialized) return;
+
+  const cal = $('#calendar');
+  if (!cal) return;
+
+  cal.addEventListener('click', (e) => {
+    const moreLess = e.target.closest('[data-toggle-date]');
+    if (moreLess) {
+      toggleDayExpansion(new Date(moreLess.dataset.toggleDate));
+      e.stopPropagation();
+      return;
+    }
+
+    const aptEl = e.target.closest('[data-apt-id]');
+    if (aptEl) {
+      const apt = appointments.find(a => String(a.id) === aptEl.dataset.aptId);
+      if (apt) selectAppointment(apt);
+      e.stopPropagation();
+      return;
+    }
+
+    const dayEl = e.target.closest('[data-date]');
+    if (dayEl) selectDate(parseDate(dayEl.dataset.date));
+  });
+
+  calendarEventsInitialized = true;
 }
 
 function setStatus(msg, cls = '') {
@@ -41,115 +125,96 @@ function getToken() { return localStorage.getItem('adm_token') || ''; }
 function setToken(t) { localStorage.setItem('adm_token', t); }
 function clearToken() { localStorage.removeItem('adm_token'); }
 
-async function login(password) {
-  const res = await fetch('/api/admin/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password })
+function authHeaders() {
+  // Authentication disabled - return empty headers
+  return {};
+  // const token = getToken();
+  // if (!token) throw new Error('Not logged in');
+  // return { Authorization: `Bearer ${token}` };
+}
+
+async function request(path, { method = 'GET', body, headers = {} } = {}) {
+  const res = await fetch(path, {
+    method,
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Login failed');
+
+  // Safer than res.json(): supports empty responses and non-JSON errors
+  const text = await res.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+
+  if (!res.ok) throw new Error(data.error || `${method} ${path} failed`);
+  return data;
+}
+
+async function authRequest(path, opts = {}) {
+  return request(path, {
+    ...opts,
+    headers: { ...authHeaders(), ...(opts.headers || {}) },
+  });
+}
+
+async function login(password) {
+  const data = await request('/api/admin/login', { method: 'POST', body: { password } });
   return data.token;
 }
 
 async function fetchAppointments() {
-  const token = getToken();
-  const res = await fetch('/api/appointments', { headers: { 'Authorization': `Bearer ${token}` } });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Failed to load');
+  const data = await authRequest('/api/appointments');
   return data.appointments || [];
 }
 
 async function patchAppointment(id, patch) {
-  const token = getToken();
-  const res = await fetch(`/api/appointments/${id}`, {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-    body: JSON.stringify(patch)
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Update failed');
+  const data = await authRequest(`/api/appointments/${id}`, { method: 'PATCH', body: patch });
   return data.appointment;
 }
 
-// Account management functions
 async function fetchAccounts() {
-  const token = getToken();
-  const res = await fetch('/api/accounts', { headers: { 'Authorization': `Bearer ${token}` } });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Failed to fetch accounts');
+  const data = await authRequest('/api/accounts');
   return data.accounts;
 }
 
 async function createAccount(appointmentId, notes = '') {
-  const token = getToken();
-  const res = await fetch('/api/accounts', {
+  const data = await authRequest('/api/accounts', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-    body: JSON.stringify({ appointmentId, notes })
+    body: { appointmentId, notes },
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Failed to create account');
   return data.account;
 }
 
 async function patchAccount(id, patch) {
-  const token = getToken();
-  const res = await fetch(`/api/accounts/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-    body: JSON.stringify(patch)
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Update failed');
+  const data = await authRequest(`/api/accounts/${id}`, { method: 'PATCH', body: patch });
   return data.account;
 }
 
 async function deleteAccount(id) {
-  const token = getToken();
-  const res = await fetch(`/api/accounts/${id}`, {
-    method: 'DELETE',
-    headers: { 'Authorization': `Bearer ${token}` }
-  });
-  if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error || 'Delete failed');
-  }
+  await authRequest(`/api/accounts/${id}`, { method: 'DELETE' });
   return true;
 }
 
 async function addNotification(accountId, message, date, recurring = false, recurrenceWeeks = 1) {
-  const token = getToken();
-  const res = await fetch(`/api/accounts/${accountId}/notifications`, {
+  const data = await authRequest(`/api/accounts/${accountId}/notifications`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-    body: JSON.stringify({ message, date, recurring, recurrenceWeeks })
+    body: { message, date, recurring, recurrenceWeeks },
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Failed to add notification');
   return data.notification;
 }
 
 async function deleteNotification(accountId, notificationId) {
-  const token = getToken();
-  const res = await fetch(`/api/accounts/${accountId}/notifications/${notificationId}`, {
-    method: 'DELETE',
-    headers: { 'Authorization': `Bearer ${token}` }
-  });
-  if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error || 'Delete failed');
-  }
+  await authRequest(`/api/accounts/${accountId}/notifications/${notificationId}`, { method: 'DELETE' });
   return true;
 }
 
 async function updateNotification(accountId, notificationId, updates) {
-  const token = getToken();
-  const res = await fetch(`/api/accounts/${accountId}/notifications/${notificationId}`, {
+  const data = await authRequest(`/api/accounts/${accountId}/notifications/${notificationId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-    body: JSON.stringify(updates)
+    body: updates,
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Failed to update notification');
   return data.notification;
 }
 
@@ -161,8 +226,17 @@ let selectedDate = null;
 let selectedAppointment = null;
 
 function formatDate(date) {
-  return date.toISOString().split('T')[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
+
+function parseDate(dateStr) {
+  return new Date(`${dateStr}T00:00:00`);
+}
+
+
 
 function formatDisplayDate(date) {
   return date.toLocaleDateString('en-US', {
@@ -208,171 +282,143 @@ async function loadTodaysNotifications() {
   }
 }
 
-function renderCalendar() {
-  const calendar = $('#calendar');
-  const monthStart = getMonthStart(currentDate);
-  const monthEnd = getMonthEnd(currentDate);
+function AppointmentChip(apt) {
+  return el('div', {
+    class: `appointment-item ${apt.status}`,
+    title: `${apt.name} - ${apt.timeWindow}`,
+    'data-apt-id': String(apt.id),
+  }, `${apt.timeWindow}: ${apt.name}`);
+}
 
-  const startDate = new Date(monthStart);
-  startDate.setDate(startDate.getDate() - monthStart.getDay()); // Sunday
+function DayCell(dateObj, isCurrentMonth, isToday, dayAppointments) {
+  const dateKey = formatDate(dateObj);
 
-  const endDate = new Date(monthEnd);
-  endDate.setDate(endDate.getDate() + (6 - monthEnd.getDay())); // Saturday
+  const chips = dayAppointments.map(AppointmentChip);
 
-  // Header text
-  $('#currentMonth').textContent = currentDate.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long'
-  });
+  const appointmentsNode =
+    chips.length > 3
+      ? el('div', {},
+        el('div', { class: 'calendar-appointments-limited', style: { display: 'block' } },
+          ...chips.slice(0, 3),
+          el('button', { class: 'appointment-more', 'data-toggle-date': dateKey, type: 'button' }, `+${chips.length - 3} more`)
+        ),
+        el('div', { class: 'calendar-appointments-expanded', style: { display: 'none' } },
+          el('button', { class: 'appointment-more expanded', 'data-toggle-date': dateKey, type: 'button' }, 'Show less'),
+          ...chips
+        )
+      )
+      : el('div', {}, ...chips);
 
-  // Build a date -> appointments map once
-  const apptsByDate = new Map();
-  for (const apt of appointments) {
-    if (!apptsByDate.has(apt.date)) apptsByDate.set(apt.date, []);
-    apptsByDate.get(apt.date).push(apt);
-  }
+  const appointmentsEl = el('div', { class: 'calendar-appointments' }, appointmentsNode);
 
-  const header = el('div', { class: 'calendar-header' },
-    el('div', {}, 'Sun'),
-    el('div', {}, 'Mon'),
-    el('div', {}, 'Tue'),
-    el('div', {}, 'Wed'),
-    el('div', {}, 'Thu'),
-    el('div', {}, 'Fri'),
-    el('div', {}, 'Sat')
+  return el('div', {
+    class: `calendar-day ${isCurrentMonth ? '' : 'other-month'} ${isToday ? 'today' : ''}`,
+    'data-date': dateKey
+  },
+    el('div', { class: 'calendar-day-number' }, dateObj.getDate()),
+    appointmentsEl
   );
-
-  const grid = el('div', { class: 'calendar-grid' });
-  grid.appendChild(header);
-
-  const current = new Date(startDate);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  while (current <= endDate) {
-    const dateKey = formatDate(current);
-    const dayAppointments = apptsByDate.get(dateKey) || [];
-
-    const isToday = current.toDateString() === today.toDateString();
-    const isCurrentMonth = current.getMonth() === currentDate.getMonth();
-    const currentDateCopy = new Date(current);
-
-    const dayElement = el('div', {
-      class: `calendar-day ${isCurrentMonth ? '' : 'other-month'} ${isToday ? 'today' : ''}`,
-      'data-date': dateKey,
-      onclick: () => selectDate(currentDateCopy)
-    },
-      el('div', { class: 'calendar-day-number' }, current.getDate()),
-      el('div', { class: 'calendar-appointments' })
-    );
-
-    if (dayAppointments.length) {
-      const appointmentsContainer = dayElement.querySelector('.calendar-appointments');
-
-      if (dayAppointments.length > 3) {
-        const limitedContainer = el('div', { class: 'calendar-appointments-limited' });
-
-        dayAppointments.slice(0, 3).forEach(apt => {
-          const aptElement = el('div', {
-            class: `appointment-item ${apt.status}`,
-            title: `${apt.name} - ${apt.timeWindow}`
-          }, `${apt.timeWindow}: ${apt.name}`);
-          aptElement.addEventListener('click', (e) => { e.stopPropagation(); selectAppointment(apt); });
-          limitedContainer.appendChild(aptElement);
-        });
-
-        const moreElement = el('div', { class: 'appointment-more' }, `+${dayAppointments.length - 3} more`);
-        moreElement.addEventListener('click', (e) => {
-          e.stopPropagation();
-          toggleDayExpansion(currentDateCopy, dayAppointments);
-        });
-        limitedContainer.appendChild(moreElement);
-
-        const expandedContainer = el('div', {
-          class: 'calendar-appointments-expanded',
-          style: 'display: none;'
-        });
-
-        const lessElement = el('div', { class: 'appointment-more expanded' }, 'Show less');
-        lessElement.addEventListener('click', (e) => {
-          e.stopPropagation();
-          toggleDayExpansion(currentDateCopy, dayAppointments);
-        });
-        expandedContainer.appendChild(lessElement);
-
-        dayAppointments.forEach(apt => {
-          const aptElement = el('div', {
-            class: `appointment-item ${apt.status}`,
-            title: `${apt.name} - ${apt.timeWindow}`
-          }, `${apt.timeWindow}: ${apt.name}`);
-          aptElement.addEventListener('click', (e) => { e.stopPropagation(); selectAppointment(apt); });
-          expandedContainer.appendChild(aptElement);
-        });
-
-        appointmentsContainer.appendChild(limitedContainer);
-        appointmentsContainer.appendChild(expandedContainer);
-      } else {
-        dayAppointments.forEach(apt => {
-          const aptElement = el('div', {
-            class: `appointment-item ${apt.status}`,
-            title: `${apt.name} - ${apt.timeWindow}`
-          }, `${apt.timeWindow}: ${apt.name}`);
-          aptElement.addEventListener('click', (e) => { e.stopPropagation(); selectAppointment(apt); });
-          appointmentsContainer.appendChild(aptElement);
-        });
-      }
-    }
-
-    grid.appendChild(dayElement);
-    current.setDate(current.getDate() + 1);
-  }
-
-  calendar.replaceChildren(grid); // slightly cleaner than innerHTML=''
 }
 
-function toggleDayExpansion(date, dayAppointments) {
-  const dateStr = formatDate(date);
-  const dayElement = document.querySelector(`[data-date="${dateStr}"]`);
-
-  if (!dayElement) return;
-
-  const limitedContainer = dayElement.querySelector('.calendar-appointments-limited');
-  const expandedContainer = dayElement.querySelector('.calendar-appointments-expanded');
-
-  if (!limitedContainer || !expandedContainer) return;
-
-  if (limitedContainer.style.display === 'none' || limitedContainer.style.display === '') {
-    // Currently showing expanded, switch to limited
-    limitedContainer.style.display = 'block';
-    expandedContainer.style.display = 'none';
-  } else {
-    // Currently showing limited, switch to expanded
-    limitedContainer.style.display = 'none';
-    expandedContainer.style.display = 'block';
-  }
+function parseTime(timeStr) {
+  const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if (!match) return 0;
+  let hour = parseInt(match[1]);
+  const min = parseInt(match[2]);
+  const ampm = match[3].toUpperCase();
+  if (ampm === 'PM' && hour !== 12) hour += 12;
+  if (ampm === 'AM' && hour === 12) hour = 0;
+  return hour * 60 + min;
 }
 
-function selectDate(date) {
-  selectedDate = new Date(date);
-  selectedAppointment = null; // Clear appointment selection when selecting a date
-  const dayAppointments = appointments.filter(apt => apt.date === formatDate(selectedDate));
+// function renderCalendar() {
+//   const calendar = $('#calendar');
 
-  $('#selectedDate').textContent = formatDisplayDate(selectedDate);
-  $('#appointmentDetails').hidden = false;
+//   const monthStart = getMonthStart(currentDate);
+//   const monthEnd = getMonthEnd(currentDate);
 
-  renderDayAppointments(dayAppointments, accounts);
-}
+//   //Header text
+//   // $('#currentMonth').textContent = currentDate.toLocaleDateString('en-US', {
+//   //   year: 'numeric',
+//   //   month: 'long'
+//   // });
 
-function selectAppointment(appointment) {
-  selectedDate = new Date(appointment.date);
-  selectedAppointment = appointment;
-  const dayAppointments = appointments.filter(apt => apt.date === formatDate(selectedDate));
+//   // Build date range to fill full weeks (Sun..Sat)
+//   const startDate = new Date(monthStart);
+//   startDate.setDate(startDate.getDate() - startDate.getDay()); // Sunday
 
-  $('#selectedDate').textContent = formatDisplayDate(selectedDate);
-  $('#appointmentDetails').hidden = false;
+//   const endDate = new Date(monthEnd);
+//   endDate.setDate(endDate.getDate() + (6 - endDate.getDay())); // Saturday
 
-  renderDayAppointments(dayAppointments, accounts);
-}
+//   // Map appointments by date once
+//   const apptsByDate = new Map();
+//   for (const apt of appointments) {
+//     const arr = apptsByDate.get(apt.date) || [];
+//     arr.push(apt);
+//     apptsByDate.set(apt.date, arr);
+//   }
+
+//   const header = el('div', { class: 'calendar-header' },
+//     ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => el('div', {}, d))
+//   );
+
+//   const grid = el('div', { class: 'calendar-grid' }, header);
+
+//   const today = new Date();
+//   today.setHours(0, 0, 0, 0);
+
+//   for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+//     const dateKey = formatDate(d);
+//     const dayAppointments = apptsByDate.get(dateKey) || [];
+//     dayAppointments.sort((a, b) => parseTime(a.timeWindow) - parseTime(b.timeWindow));
+
+//     const isToday = d.toDateString() === today.toDateString();
+//     const isCurrentMonth = d.getMonth() === currentDate.getMonth();
+
+//     grid.appendChild(DayCell(new Date(d), isCurrentMonth, isToday, dayAppointments));
+//   }
+
+//   calendar.replaceChildren(grid);
+// }
+
+// function toggleDayExpansion(date) {
+//   const dateStr = formatDate(date);
+//   const dayElement = document.querySelector(`[data-date="${dateStr}"]`);
+//   if (!dayElement) return;
+
+//   const appointmentsEl = dayElement.querySelector('.calendar-appointments');
+//   const limited = dayElement.querySelector('.calendar-appointments-limited');
+//   const expanded = dayElement.querySelector('.calendar-appointments-expanded');
+//   if (!limited || !expanded || !appointmentsEl) return;
+
+//   const limitedShowing = limited.style.display !== 'none';
+//   limited.style.display = limitedShowing ? 'none' : 'block';
+//   expanded.style.display = limitedShowing ? 'block' : 'none';
+//   appointmentsEl.style.maxHeight = limitedShowing ? 'none' : '120px';
+//   if (!limitedShowing) appointmentsEl.scrollTop = 0;
+// }
+
+// function selectDate(date) {
+//   selectedDate = new Date(date);
+//   selectedAppointment = null; // Clear appointment selection when selecting a date
+//   const dayAppointments = appointments.filter(apt => apt.date === formatDate(selectedDate));
+
+//   $('#selectedDate').textContent = formatDisplayDate(selectedDate);
+//   $('#appointmentDetails').hidden = false;
+
+//   renderDayAppointments(dayAppointments, accounts);
+// }
+
+// function selectAppointment(appointment) {
+//   selectedDate = parseDate(appointment.date);
+//   selectedAppointment = appointment;
+//   const dayAppointments = appointments.filter(apt => apt.date === formatDate(selectedDate));
+
+//   $('#selectedDate').textContent = formatDisplayDate(selectedDate);
+//   $('#appointmentDetails').hidden = false;
+
+//   renderDayAppointments(dayAppointments, accounts);
+// }
 
 function renderDayAppointments(dayAppointments, accounts = []) {
   const container = $('#dayAppointments');
@@ -589,6 +635,33 @@ function renderNotifications(account) {
   });
 }
 
+function renderNotificationsList(notifications) {
+  const container = $('#notifications-list');
+  container.innerHTML = '';
+
+  if (notifications.length === 0) {
+    container.appendChild(el('div', { class: 'note' }, 'No notifications for today.'));
+    return;
+  }
+
+  // Sort by date
+  notifications.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  notifications.forEach(notification => {
+    const date = new Date(notification.date).toLocaleDateString();
+    let displayText = `📅 ${date}: ${notification.message} (${notification.accountName})`;
+    if (notification.recurring) {
+      displayText += ` 🔄 (Repeats every ${notification.recurrenceWeeks} week${notification.recurrenceWeeks !== 1 ? 's' : ''})`;
+    }
+
+    const notificationItem = el('div', { class: 'notification-item' },
+      el('div', { class: 'notification-content' }, displayText)
+    );
+
+    container.appendChild(notificationItem);
+  });
+}
+
 async function loadAccounts() {
   try {
     const accounts = await fetchAccounts();
@@ -696,7 +769,7 @@ function editNotification(notification, accountId) {
 async function saveNotificationEdit(notificationId, accountId) {
   // Get the accountId from the dataset to ensure consistency
   const currentAccountId = $('#accountDetails').dataset.accountId;
-  
+
   const date = $('#editNotificationDate').value;
   const message = $('#editNotificationMessage').value.trim();
   const recurring = $('#editNotificationRecurring').checked;
@@ -723,21 +796,17 @@ function cancelNotificationEdit() {
 }
 
 async function loadAppointments() {
-  try {
-    const allAppointments = await fetchAppointments();
-    accounts = await fetchAccounts();
-    // Filter appointments for the current month view
-    const startDate = formatDate(getMonthStart(currentDate));
-    const endDate = formatDate(getMonthEnd(currentDate));
-    appointments = allAppointments.filter(apt => apt.date >= startDate && apt.date <= endDate);
-    renderCalendar();
+  const allAppointments = await fetchAppointments();
+  accounts = await fetchAccounts();
+  // Filter appointments for the current month view
+  const startDate = formatDate(getMonthStart(currentDate));
+  const endDate = formatDate(getMonthEnd(currentDate));
+  appointments = allAppointments.filter(apt => apt.date >= startDate && apt.date <= endDate);
+  renderCalendar();
 
-    if (selectedDate) {
-      const dayAppointments = allAppointments.filter(apt => apt.date === formatDate(selectedDate));
-      renderDayAppointments(dayAppointments, accounts);
-    }
-  } catch (error) {
-    alert(`❌ Failed to load appointments: ${error.message}`);
+  if (selectedDate) {
+    const dayAppointments = allAppointments.filter(apt => apt.date === formatDate(selectedDate));
+    renderDayAppointments(dayAppointments, accounts);
   }
 }
 
@@ -753,64 +822,70 @@ function exportCsv(list) {
   URL.revokeObjectURL(url);
 }
 
-(function init() {
-  const token = getToken();
-  if (token) {
-    // Try to load appointments, but handle invalid tokens
-    loadAppointments().catch(error => {
-      if (error.message.includes('Unauthorized')) {
-        // Token is invalid, clear it and show login form
-        clearToken();
-        $('#loginSection').hidden = false;
-        $('#adminSection').hidden = true;
-      } else {
-        alert(`❌ ${error.message}`);
-      }
-    });
-  } else {
-    // No token, show login form
-    $('#loginSection').hidden = false;
-    $('#adminSection').hidden = true;
+async function init() {
+  // Authentication disabled - bypass token check
+  // const token = getToken();
+
+  // Show/hide sections up front - always show admin section
+  $('#loginSection').hidden = true;
+  $('#adminSection').hidden = false;
+
+  // Bind calendar delegation once
+  initCalendarEvents();
+
+  // Load data without token check
+  try {
+    await loadAppointments();
+    await loadTodaysNotifications();
+  } catch (error) {
+    alert(`❌ ${error.message}`);
   }
 
+  // Login
   $('#loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     setStatus('⏳ Signing in...', 'loading');
+
     const pwd = new FormData(e.currentTarget).get('password');
+
     try {
       const t = await login(pwd);
       setToken(t);
+
       setStatus('✅ Login successful!', 'success');
-      setTimeout(() => {
-        $('#loginSection').hidden = true;
-        $('#adminSection').hidden = false;
-        loadAppointments();
-        loadTodaysNotifications();
-      }, 1000);
+
+      $('#loginSection').hidden = true;
+      $('#adminSection').hidden = false;
+
+      initCalendarEvents(); // safe because you have init-once guard
+      await loadAppointments();
+      await loadTodaysNotifications();
     } catch (err) {
       setStatus(`❌ ${err.message}`, 'error');
     }
   });
 
   // Calendar navigation
-  $('#prevMonth').addEventListener('click', () => {
+  $('#prevMonth').addEventListener('click', async () => {
     currentDate.setMonth(currentDate.getMonth() - 1);
-    loadAppointments();
+    await loadAppointments();
   });
 
-  $('#nextMonth').addEventListener('click', () => {
+  $('#nextMonth').addEventListener('click', async () => {
     currentDate.setMonth(currentDate.getMonth() + 1);
-    loadAppointments();
+    await loadAppointments();
   });
 
-  $('#refresh').addEventListener('click', () => {
-    loadAppointments();
-    loadTodaysNotifications();
+  $('#refresh').addEventListener('click', async () => {
+    await loadAppointments();
+    await loadTodaysNotifications();
   });
+
   $('#exportCsv').addEventListener('click', async () => {
     const allAppointments = await fetchAppointments().catch(() => []);
     exportCsv(allAppointments);
   });
+
 
   // Account management event listeners
   $('#manageAccounts').addEventListener('click', () => {
@@ -909,5 +984,6 @@ function exportCsv(list) {
     $('#appointmentDetails').hidden = true;
     $('#accountsSection').hidden = true;
   });
-})();
+}
 
+init();

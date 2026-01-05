@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="styles/account.css">
+  <script src="scripts/account.js" type="module" defer></script>
+  <title>Create Account</title>
+</head>
+<body>
+  <header class="account-header-container">
+    <h1 class="create-account">Create Account</h1>
+  </header>
+  <main class="main-account">
+    <div class="form-container">
+      <form class="form-account">
+        <p>Company Name</p>
+        <input type="text" name="company">
+        <p>Contact Name</p>
+        <input type="text" name="contact-name">
+        <p>Email Address</p>
+        <input type="email" name="email">
+        <p>Phone Number</p>
+        <input type="tel" name="phone">
+        <p>Pickup Address</p>
+        <input type="text" name="address">
+        <p>City</p>
+        <input type="text" name="city">
+        <p>State</p>
+        <input type="text" name="state">
+        <p>Zip Code</p>
+        <input type="text" name="zip">
+      </form>
+      <div class="account-save-button">
+        <button id="save-account" type="submit" data-create-account-button>Save Account</button>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

@@ -45,3 +45,9 @@ Data files:
 ## Notes
 
 - This is a simple demo suitable for a small operation. Consider migrating to a database, adding per-slot capacity, email/SMS notifications, and robust auth for production use.
+
+
+## Video link
+
+- https://www.youtube.com/watch?v=PXOsddcWL4g
+- last ended @ 1:06:57

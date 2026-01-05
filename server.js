@@ -246,6 +246,59 @@ async function handleApi(req, res, parsed) {
     }
   }
 
+  // Public account creation (used by /account.html)
+  if (method === 'POST' && pathname === '/api/public/accounts') {
+    try {
+      const body = await parseBody(req);
+      const company = (body?.company || '').trim();
+      const contactName = (body?.contactName || '').trim();
+      const email = (body?.email || '').trim();
+      const phone = (body?.phone || '').trim();
+      const address = (body?.address || '').trim();
+      const city = (body?.city || '').trim();
+      const state = (body?.state || '').trim();
+      const zip = (body?.zip || '').trim();
+
+      if (!company || !contactName || !phone || !address || !city || !state || !zip) {
+        return sendJson(res, 400, { error: 'Missing required fields' });
+      }
+
+      const accounts = await getAccounts();
+      if (email) {
+        const existing = accounts.find(a => (a.email || '').toLowerCase() === email.toLowerCase());
+        if (existing) return sendJson(res, 409, { error: 'Account already exists for this email' });
+      }
+
+      const account = {
+        id: generateId('acc_'),
+        createdAt: new Date().toISOString(),
+        company,
+        name: contactName,
+        email,
+        phone,
+        address,
+        city,
+        state,
+        zip,
+        totalPickups: 0,
+        lastPickup: null,
+        notifications: [],
+        notes: ''
+      };
+
+      accounts.push(account);
+      await saveAccounts(accounts);
+      return sendJson(res, 201, { account });
+    } catch (e) {
+      return sendJson(res, 400, { error: e.message || 'Invalid request' });
+    }
+  }
+
+  if (method === 'GET' && pathname === '/api/admin/session') {
+    if (!authAdmin(req)) return sendJson(res, 401, { error: 'Unauthorized' });
+    return sendJson(res, 200, { ok: true });
+  }
+
   if (pathname === '/api/appointments' && method === 'GET') {
     if (!authAdmin(req)) return sendJson(res, 401, { error: 'Unauthorized' });
     const appts = await getAppointments();
@@ -349,7 +402,7 @@ async function handleApi(req, res, parsed) {
     const idx = accounts.findIndex(a => a.id === id);
     if (idx === -1) return sendJson(res, 404, { error: 'Account not found' });
 
-    const allowed = ['name', 'email', 'phone', 'address', 'city', 'state', 'zip', 'notes'];
+    const allowed = ['company', 'name', 'email', 'phone', 'address', 'city', 'state', 'zip', 'notes'];
     for (const key of allowed) {
       if (key in body) accounts[idx][key] = body[key];
     }
