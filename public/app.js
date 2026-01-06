@@ -42,7 +42,7 @@ function showStatus(msg, cls) {
     btn.classList.add('loading');
   } else {
     btn.disabled = false;
-    btnText.textContent = '� Schedule Tire Pickup';
+    btnText.textContent = 'Schedule Tire Pickup';
     btn.classList.remove('loading');
   }
 }

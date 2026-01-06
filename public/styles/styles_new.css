@@ -77,6 +77,7 @@
   --duration-md: 200ms;
 
   --border-radius-md: .025rem;
+  --border-radius-lg: 0.5rem;
 
   --box-shadow-md: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
 
@@ -240,7 +241,7 @@ h2::after {
   transform: translateX(-50%);
   width: 80px;
   height: 6px;
-  background: var(--gradient-secondary);
+  background: var(--gradient-primary);
   border-radius: 3px;
   animation: pulse 3s ease-in-out infinite;
 }
@@ -357,10 +358,10 @@ textarea {
   content: '';
   position: absolute;
   bottom: -8px;
-  left: 0;
+  left: 4px;
   width: 40px;
   height: 3px;
-  background: var(--gradient-secondary);
+  background: var(--gradient-primary);
   border-radius: 2px;
 }
 
@@ -371,6 +372,26 @@ textarea {
   gap: 1.5rem;
   margin-top: 3rem;
   flex-wrap: wrap;
+}
+
+
+
+#submitBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: var(--font-size-lg);
+  color: var(--color-white);
+  background-color: var(--accent-secondary);
+  line-height: var(--line-height-sm);
+  font-weight: 400;
+  border-radius: var(--border-radius-lg);
+  border: 1px solid var(--color-gray-300);
+  padding: 0 1rem;
+  height: 2.125rem;
+  cursor: pointer;
+  transition: background-color var(--duration-sm) ease-out;
 }
 
 button:hover::before {
@@ -1176,14 +1197,17 @@ header p {
 }
 
 .create-account-button {
-  background-color: var(--color-blue-600);
+  display: flex;
+  justify-content: center;
+  background-color: var(--accent-secondary);
   color: var(--color-white);
   font-size: var(--font-size-md);
   padding: 0.75rem 1.5rem;
   border: 1px solid var(--color-gray-300);
-  border-radius: var(--border-radius-md);
-  margin: 1.5rem;
+  border-radius: var(--border-radius-lg);
+  margin: 1.5rem auto;
   text-decoration: none;
+  width: fit-content;
 }
 
 @media (max-width: 768px) {
