@@ -61,6 +61,8 @@ async function login(password) {
 }
 
 async function bootAdminApp() {
+  // Keep appointment sync separate from the calendar source code.
+  await import('./appointment-calendar-sync.js');
   // Importing index.js starts the calendar app.
   await import('./index.js');
 }

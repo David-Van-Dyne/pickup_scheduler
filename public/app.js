@@ -33,8 +33,12 @@ function showStatus(msg, cls) {
   const btn = document.getElementById('submitBtn');
   const btnText = document.getElementById('btnText');
 
-  el.textContent = msg;
-  el.className = cls || '';
+
+  if (el) {
+    el.textContent = msg;
+    el.className = cls || '';
+
+  }
 
   if (cls === 'loading') {
     btn.disabled = true;

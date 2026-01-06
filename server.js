@@ -4,6 +4,7 @@ const fsp = require('fs').promises;
 const path = require('path');
 const url = require('url');
 const crypto = require('crypto');
+const { time } = require('console');
 
 // Load environment variables from .env file
 let ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
@@ -191,15 +192,15 @@ async function handleApi(req, res, parsed) {
     try {
       const body = await parseBody(req);
       const {
-        name, email, phone, address, city, state, zip,
+        companyName, name, email, phone, address, city, state, zip,
         date, timeWindow, tiresCount, notes
       } = body || {};
 
       const dateOnly = normalizeDateOnly(date);
-      if (!name || !(email || phone) || !address || !zip || !dateOnly || !timeWindow) {
+      if (!companyName || !name || !(email || phone) || !address || !zip || !dateOnly) {
         return sendJson(res, 400, { error: 'Missing required fields' });
       }
-      if (!cfg.timeWindows.includes(timeWindow)) {
+      if (timeWindow &&!cfg.timeWindows.includes(timeWindow)) {
         return sendJson(res, 400, { error: 'Invalid time window' });
       }
       if (isBlackoutDate(cfg, dateOnly)) {
@@ -216,8 +217,9 @@ async function handleApi(req, res, parsed) {
         id: generateId('apt_'),
         createdAt: new Date().toISOString(),
         status: 'scheduled',
-        name, email, phone, address, city: city || '', state: state || '', zip,
-        date: dateOnly, timeWindow,
+        companyName, name, email, phone, address, city: city || '', state: state || '', zip,
+        date: dateOnly, 
+        timeWindow: timeWindow || '',
         tiresCount: Number(tiresCount) || 0,
         notes: notes || ''
       };
@@ -315,12 +317,31 @@ async function handleApi(req, res, parsed) {
     const appts = await getAppointments();
     const idx = appts.findIndex(a => a.id === id);
     if (idx === -1) return sendJson(res, 404, { error: 'Not found' });
-    const allowed = ['status', 'notes'];
+    const allowed = ['status', 'notes', 'companyName', 'name', 'email', 'phone', 'address', 'city', 'state', 'zip', 'date', 'timeWindow', 'tiresCount'];
     for (const key of allowed) {
       if (key in body) appts[idx][key] = body[key];
     }
     await saveAppointments(appts);
     return sendJson(res, 200, { appointment: appts[idx] });
+  }
+
+  // Validate date if updated
+  if ('date' in body) {
+    const dateOnly = normalizeDateOnly(appts[idx].date);
+    if (!dateOnly) return sendJson(res, 400, { error: 'Invalid date' });
+    appts[idx].date = dateOnly;
+  }
+
+  // Validate timeWindow if updated
+  if ('timeWindow' in body) {
+    const tw = appts[idx].timeWindow || '';
+    if (tw && !cfg.timeWindows.includes(tw)) {
+      return sendJson(res, 400, { error: 'Invalid time window' });
+    }
+  }
+
+  if ('tiresCount' in body) {
+    appts[idx].tiresCount = Number(appts[idx].tiresCount) || 0;
   }
 
   // Account management endpoints
@@ -522,7 +543,7 @@ async function handleApi(req, res, parsed) {
     return sendJson(res, 200, { notification });
   }
 
-  if (method === 'GET' && pathname === '/healthz') {
+  if (method === 'GET' && (pathname === '/healthz' || pathname === '/api/healthz')) {
     return sendJson(res, 200, { ok: true });
   }
 
@@ -569,7 +590,7 @@ async function requestListener(req, res) {
     return res.end();
   }
 
-  if (parsed.pathname && parsed.pathname.startsWith('/api/')) {
+  if (parsed.pathname && (parsed.pathname.startsWith('/api/') || parsed.pathname === '/healthz')) {
     const handled = await handleApi(req, res, parsed);
     if (handled !== null) return;
   }
@@ -591,4 +612,3 @@ bootstrap().then(() => {
     console.log(`Pickup scheduler listening on http://localhost:${PORT}`);
   });
 });
-
